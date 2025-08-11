@@ -5,6 +5,7 @@ import {
   extractCloses,
   extractHighs,
   extractLows,
+  extractVolumes,
   BinanceIntervalSchema,
 } from "@/lib/binance";
 import { computeIndicators, heuristicTaRecommendation } from "@/lib/indicators";
@@ -47,9 +48,10 @@ export async function GET(req: NextRequest) {
     const closes = extractCloses(klines);
     const highs = extractHighs(klines);
     const lows = extractLows(klines);
+    const volumes = extractVolumes(klines);
 
     // 2) Indicators and TA heuristic
-    const snapshot = computeIndicators({ closes, highs, lows });
+    const snapshot = computeIndicators({ closes, highs, lows, volumes });
     const ta = heuristicTaRecommendation(snapshot);
 
     // 3) News sentiment via OpenAI
@@ -85,13 +87,32 @@ export async function GET(req: NextRequest) {
       newsSentiment: sentiment,
     });
 
+    // ATR-based stop/target and position sizing
+    const atr = snapshot.atr14 ?? 0;
+    const lastClose = closes.at(-1)!;
+    const stopMultiple = 1.5;
+    const targetMultiple = 2.5;
+    const stopLoss =
+      finalSignal.direction === "long"
+        ? lastClose - stopMultiple * atr
+        : finalSignal.direction === "short"
+        ? lastClose + stopMultiple * atr
+        : undefined;
+    const takeProfit =
+      finalSignal.direction === "long"
+        ? lastClose + targetMultiple * atr
+        : finalSignal.direction === "short"
+        ? lastClose - targetMultiple * atr
+        : undefined;
+    const positionSizePct = Math.max(0, Math.min(1, finalSignal.strength / 100)) * 0.5;
+
     return NextResponse.json({
       symbol,
       interval,
       indicators: snapshot,
       ta,
       news: { headlines, sentiment },
-      signal: finalSignal,
+      signal: { ...finalSignal, stopLoss, takeProfit, positionSizePct },
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";

@@ -1,4 +1,4 @@
-import { RSI, EMA, MACD, Stochastic } from "technicalindicators";
+import { RSI, EMA, MACD, Stochastic, ADX, ATR, BollingerBands, OBV, SMA } from "technicalindicators";
 
 export type IndicatorInputs = {
   closes: number[];
@@ -13,13 +13,14 @@ export type IndicatorSnapshot = {
   ema50?: number;
   macd?: { macd: number; signal: number; histogram: number };
   stoch?: { k: number; d: number };
+  adx14?: number;
+  atr14?: number;
+  bb20?: { middle: number; upper: number; lower: number; bandwidth: number; percentB: number };
+  obv?: number;
+  sma200?: number;
 };
 
-export function computeIndicators({
-  closes,
-  highs,
-  lows,
-}: IndicatorInputs): IndicatorSnapshot {
+export function computeIndicators({ closes, highs, lows, volumes }: IndicatorInputs): IndicatorSnapshot {
   const rsiSeries = RSI.calculate({ values: closes, period: 14 });
   const ema20Series = EMA.calculate({ values: closes, period: 20 });
   const ema50Series = EMA.calculate({ values: closes, period: 50 });
@@ -38,12 +39,22 @@ export function computeIndicators({
     period: 14,
     signalPeriod: 3,
   });
+  const adxSeries = ADX.calculate({ high: highs, low: lows, close: closes, period: 14 });
+  const atrSeries = ATR.calculate({ high: highs, low: lows, close: closes, period: 14 });
+  const bbSeries = BollingerBands.calculate({ period: 20, values: closes, stdDev: 2 });
+  const sma200Series = SMA.calculate({ period: 200, values: closes });
+  const obvSeries = volumes ? OBV.calculate({ close: closes, volume: volumes }) : [];
 
   const rsi14 = rsiSeries.at(-1);
   const ema20 = ema20Series.at(-1);
   const ema50 = ema50Series.at(-1);
   const macd = macdSeries.at(-1);
   const stoch = stochSeries.at(-1);
+  const adx = adxSeries.at(-1);
+  const atr = atrSeries.at(-1);
+  const bb = bbSeries.at(-1);
+  const sma200 = sma200Series.at(-1);
+  const obv = obvSeries.at(-1);
 
   return {
     rsi14,
@@ -59,6 +70,19 @@ export function computeIndicators({
     stoch: stoch
       ? { k: (stoch.k as number) ?? 0, d: (stoch.d as number) ?? 0 }
       : undefined,
+    adx14: adx?.adx,
+    atr14: atr,
+    bb20: bb
+      ? {
+          middle: bb.middle,
+          upper: bb.upper,
+          lower: bb.lower,
+          bandwidth: (bb.upper - bb.lower) / (bb.middle || 1),
+          percentB: (closes.at(-1)! - bb.lower) / ((bb.upper - bb.lower) || 1),
+        }
+      : undefined,
+    obv,
+    sma200,
   };
 }
 
@@ -121,6 +145,31 @@ export function heuristicTaRecommendation(
       score -= 3 + Math.round(4 * mag);
       reasons.push("Stochastic K below D");
     }
+  }
+
+  // ADX trend filter: boost aligned signals in trending markets, penalize in chop
+  if (snapshot.adx14 !== undefined) {
+    const adx = snapshot.adx14;
+    if (adx >= 25) {
+      reasons.push("Strong trend (ADX>=25)");
+      // amplify existing score by up to 20%
+      score += Math.sign(score) * Math.min(10, Math.round(Math.abs(score) * 0.2));
+    } else if (adx < 15) {
+      reasons.push("Weak trend (ADX<15)");
+      score -= Math.sign(score) * Math.min(8, Math.round(Math.abs(score) * 0.15));
+    }
+  }
+
+  // Bollinger percentB extremes
+  if (snapshot.bb20) {
+    if (snapshot.bb20.percentB > 1.05) { score -= 5; reasons.push("Price extended above BB"); }
+    if (snapshot.bb20.percentB < -0.05) { score += 5; reasons.push("Price extended below BB"); }
+  }
+
+  // 200SMA trend bias
+  if (snapshot.sma200 !== undefined && snapshot.ema50 !== undefined) {
+    if (snapshot.ema50 > snapshot.sma200) score += 3;
+    if (snapshot.ema50 < snapshot.sma200) score -= 3;
   }
 
   // Clamp score

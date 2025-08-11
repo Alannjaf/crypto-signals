@@ -81,3 +81,7 @@ export function extractHighs(klines: Candlestick[]): number[] {
 export function extractLows(klines: Candlestick[]): number[] {
   return klines.map((k) => k.low);
 }
+
+export function extractVolumes(klines: Candlestick[]): number[] {
+  return klines.map((k) => k.volume);
+}

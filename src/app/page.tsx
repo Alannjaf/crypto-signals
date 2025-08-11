@@ -9,7 +9,7 @@ type ApiResponse = {
   indicators: IndicatorSnapshot;
   ta: { score: number; reasons: string[] };
   news: { headlines: string[]; sentiment: NewsSentiment };
-  signal: { direction: string; strength: number; rationale: string[] };
+  signal: { direction: string; strength: number; rationale: string[]; stopLoss?: number; takeProfit?: number; positionSizePct?: number };
 };
 
 const DEFAULT_SYMBOLS = [
@@ -177,10 +177,21 @@ export default function Home() {
                       <li key={i}>{r}</li>
                     ))}
                   </ul>
-                  <div className="mt-4 text-xs text-gray-500">
-                    RSI14: {data.indicators.rsi14?.toFixed?.(2) ?? "-"} · EMA20:{" "}
-                    {data.indicators.ema20?.toFixed?.(2) ?? "-"} · EMA50:{" "}
-                    {data.indicators.ema50?.toFixed?.(2) ?? "-"}
+                  <div className="mt-4 text-xs text-gray-500 space-y-1">
+                    <div>
+                      RSI14: {data.indicators.rsi14?.toFixed?.(2) ?? "-"} · EMA20: {data.indicators.ema20?.toFixed?.(2) ?? "-"} · EMA50: {data.indicators.ema50?.toFixed?.(2) ?? "-"}
+                    </div>
+                    <div>
+                      ADX14: {data.indicators.adx14?.toFixed?.(2) ?? "-"} · ATR14: {data.indicators.atr14?.toFixed?.(4) ?? "-"}
+                    </div>
+                    {data.indicators.bb20 && (
+                      <div>
+                        BB%: {data.indicators.bb20.percentB.toFixed(2)} · BB width: {data.indicators.bb20.bandwidth.toFixed(4)}
+                      </div>
+                    )}
+                    <div>
+                      SMA200: {data.indicators.sma200?.toFixed?.(2) ?? "-"}
+                    </div>
                   </div>
                 </div>
                 <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
@@ -204,6 +215,17 @@ export default function Home() {
                       ))}
                     </ul>
                   </div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                <h3 className="text-lg font-semibold">Risk & Trade Hints</h3>
+                <div className="mt-2 text-sm text-gray-700">
+                  {typeof data.signal.positionSizePct === "number" && (
+                    <div>Suggested position: {(data.signal.positionSizePct * 100).toFixed(0)}%</div>
+                  )}
+                  {typeof data.signal.stopLoss === "number" && typeof data.signal.takeProfit === "number" && (
+                    <div>SL: {data.signal.stopLoss.toFixed(4)} · TP: {data.signal.takeProfit.toFixed(4)}</div>
+                  )}
                 </div>
               </div>
             </div>

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { IndicatorSnapshot } from "@/lib/indicators";
 import type { NewsSentiment } from "@/lib/openai";
 
@@ -28,6 +28,19 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [top, setTop] = useState<{ symbol: string; name: string; binanceSymbol: string }[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/top-cryptos");
+        if (res.ok) {
+          const json = await res.json();
+          setTop(json.coins ?? []);
+        }
+      } catch {}
+    })();
+  }, []);
 
   async function generate() {
     try {
@@ -78,10 +91,24 @@ export default function Home() {
                 placeholder="BTCUSDT"
               />
               <datalist id="symbols">
-                {DEFAULT_SYMBOLS.map((s) => (
+                {[...new Set([...top.map((c) => c.binanceSymbol), ...DEFAULT_SYMBOLS])].map((s) => (
                   <option key={s} value={s} />
                 ))}
               </datalist>
+              {top.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {top.map((c) => (
+                    <button
+                      key={c.binanceSymbol}
+                      onClick={() => setSymbol(c.binanceSymbol)}
+                      className={`rounded-full border px-3 py-1 text-xs ${symbol === c.binanceSymbol ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"}`}
+                      title={c.name}
+                    >
+                      {c.symbol.toUpperCase()}USDT
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">

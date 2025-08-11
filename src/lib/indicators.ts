@@ -84,31 +84,41 @@ export function heuristicTaRecommendation(
   }
 
   if (snapshot.ema20 !== undefined && snapshot.ema50 !== undefined) {
-    if (snapshot.ema20 > snapshot.ema50) {
-      score += 15;
+    const emaSpread = snapshot.ema20 - snapshot.ema50;
+    const magnitude = Math.min(
+      1,
+      Math.abs(emaSpread) / (Math.abs(snapshot.ema50) * 0.01 + 1e-6)
+    );
+    if (emaSpread > 0) {
+      score += 10 + Math.round(10 * magnitude); // 10..20
       reasons.push("EMA20 above EMA50 (bullish)");
     } else {
-      score -= 15;
+      score -= 10 + Math.round(10 * magnitude); // -10..-20
       reasons.push("EMA20 below EMA50 (bearish)");
     }
   }
 
   if (snapshot.macd) {
-    if (snapshot.macd.histogram > 0) {
-      score += 10;
+    const h = snapshot.macd.histogram;
+    const ref = Math.abs(snapshot.ema50 ?? snapshot.ema20 ?? 1);
+    const mag = Math.min(1, Math.abs(h) / (ref * 0.002 + 1e-6));
+    if (h > 0) {
+      score += 5 + Math.round(5 * mag);
       reasons.push("MACD histogram positive");
-    } else if (snapshot.macd.histogram < 0) {
-      score -= 10;
+    } else if (h < 0) {
+      score -= 5 + Math.round(5 * mag);
       reasons.push("MACD histogram negative");
     }
   }
 
   if (snapshot.stoch) {
-    if (snapshot.stoch.k > snapshot.stoch.d) {
-      score += 5;
+    const delta = (snapshot.stoch.k ?? 0) - (snapshot.stoch.d ?? 0);
+    const mag = Math.min(1, Math.abs(delta) / 20);
+    if (delta > 0) {
+      score += 3 + Math.round(4 * mag);
       reasons.push("Stochastic K above D");
-    } else {
-      score -= 5;
+    } else if (delta < 0) {
+      score -= 3 + Math.round(4 * mag);
       reasons.push("Stochastic K below D");
     }
   }

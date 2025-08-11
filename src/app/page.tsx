@@ -28,7 +28,9 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [top, setTop] = useState<{ symbol: string; name: string; binanceSymbol: string }[]>([]);
+  const [top, setTop] = useState<
+    { symbol: string; name: string; binanceSymbol: string }[]
+  >([]);
 
   useEffect(() => {
     (async () => {
@@ -83,32 +85,25 @@ export default function Home() {
               <label className="block text-sm font-medium text-gray-700">
                 Symbol
               </label>
-              <input
-                list="symbols"
+              <select
                 value={symbol}
-                onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                onChange={(e) => setSymbol(e.target.value)}
                 className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-gray-900 focus:outline-none"
-                placeholder="BTCUSDT"
-              />
-              <datalist id="symbols">
-                {[...new Set([...top.map((c) => c.binanceSymbol), ...DEFAULT_SYMBOLS])].map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-              {top.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {top.map((c) => (
-                    <button
-                      key={c.binanceSymbol}
-                      onClick={() => setSymbol(c.binanceSymbol)}
-                      className={`rounded-full border px-3 py-1 text-xs ${symbol === c.binanceSymbol ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"}`}
-                      title={c.name}
-                    >
-                      {c.symbol.toUpperCase()}USDT
-                    </button>
+              >
+                {[
+                  ...new Set([
+                    ...top.map((c) => c.binanceSymbol),
+                    ...DEFAULT_SYMBOLS,
+                    symbol,
+                  ]),
+                ]
+                  .filter(Boolean)
+                  .map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
                   ))}
-                </div>
-              )}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">

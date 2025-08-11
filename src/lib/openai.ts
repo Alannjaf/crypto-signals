@@ -82,6 +82,27 @@ export type FinalSignal = {
   rationale: string[];
 };
 
+function computeStrengthFromTaAndNews(
+  taScore: number,
+  news: NewsSentiment,
+  finalDirection: FinalSignal["direction"]
+): number {
+  // Normalize TA: current heuristic ranges roughly [-50, 50]
+  const taMagnitude = Math.min(1, Math.abs(taScore) / 50);
+  // Base blend: TA carries 60%, News confidence 40%
+  let base = 60 * taMagnitude + 40 * Math.max(0, Math.min(1, news.confidence));
+
+  // Alignment adjustment: reward agreement, penalize conflict
+  const dirSign = finalDirection === "long" ? 1 : finalDirection === "short" ? -1 : 0;
+  const taSign = taScore > 3 ? 1 : taScore < -3 ? -1 : 0;
+  const newsSign = news.overall === "bullish" ? 1 : news.overall === "bearish" ? -1 : 0;
+
+  if (dirSign !== 0 && taSign !== 0) base += dirSign === taSign ? 8 : -8;
+  if (dirSign !== 0 && newsSign !== 0) base += dirSign === newsSign ? 8 : -8;
+
+  return Math.round(Math.max(0, Math.min(100, base)));
+}
+
 export async function synthesizeSignal(params: {
   symbol: string;
   timeframe: string;
@@ -101,7 +122,7 @@ export async function synthesizeSignal(params: {
     "; "
   )}\n\nNews sentiment: ${JSON.stringify(
     newsSentiment
-  )}\n\nReturn JSON with keys: direction (long|short|neutral), strength (0..100), rationale (array of concise bullet points).`;
+  )}\n\nReturn JSON with keys: direction (long|short|neutral), strength (0..100), rationale (array of concise bullet points). Prefer values far from 50 when evidence is strong.`;
 
   const completion = await client.chat.completions.create({
     model: "gpt-4o-mini",
@@ -118,7 +139,8 @@ export async function synthesizeSignal(params: {
   try {
     const parsed = JSON.parse(content);
     const direction = parsed.direction as FinalSignal["direction"];
-    const strength = Math.max(0, Math.min(100, Number(parsed.strength) || 0));
+    // Compute strength deterministically from TA + news, ignoring model default biases
+    const strength = computeStrengthFromTaAndNews(taScore, newsSentiment, direction);
     const rationale = Array.isArray(parsed.rationale)
       ? parsed.rationale.slice(0, 8)
       : [];
@@ -137,12 +159,7 @@ export async function synthesizeSignal(params: {
   let direction: FinalSignal["direction"] = "neutral";
   if (taScore > 10 && newsSentiment.overall === "bullish") direction = "long";
   if (taScore < -10 && newsSentiment.overall === "bearish") direction = "short";
-  const strength = Math.round(
-    Math.min(
-      100,
-      Math.max(0, Math.abs(taScore) * 0.6 + newsSentiment.confidence * 40)
-    )
-  );
+  const strength = computeStrengthFromTaAndNews(taScore, newsSentiment, direction);
   return {
     direction,
     strength,

@@ -11,6 +11,7 @@ import {
 import { computeIndicators, heuristicTaRecommendation } from "@/lib/indicators";
 import { fetchCryptoNews } from "@/lib/news";
 import { analyzeNewsSentiment, synthesizeSignal } from "@/lib/openai";
+import { buildDeterministicSignal } from "@/lib/signal";
 
 const QuerySchema = z.object({
   symbol: z
@@ -105,7 +106,7 @@ export async function GET(req: NextRequest) {
     });
 
     // 4) Synthesize final signal
-    const finalSignal = await synthesizeSignal({
+    const finalSignalLLM = await synthesizeSignal({
       symbol: symbolKey,
       timeframe: interval,
       taSnapshot: snapshot,
@@ -117,21 +118,23 @@ export async function GET(req: NextRequest) {
     // ATR-based stop/target and position sizing
     const atr = snapshot.atr14 ?? 0;
     const lastClose = closes.at(-1)!;
-    const stopMultiple = 1.5;
-    const targetMultiple = 2.5;
+    // Deterministic gate-based signal
+    const det = buildDeterministicSignal({ snapshot, taPrimary: ta, snapshotHTF, taConfirm: taHTF, combinedTaScore, news: sentiment });
+    const stopMultiple = det.stopMultiple;
+    const targetMultiple = det.targetMultiple;
     const stopLoss =
-      finalSignal.direction === "long"
+      det.direction === "long"
         ? lastClose - stopMultiple * atr
-        : finalSignal.direction === "short"
+        : det.direction === "short"
         ? lastClose + stopMultiple * atr
         : undefined;
     const takeProfit =
-      finalSignal.direction === "long"
+      det.direction === "long"
         ? lastClose + targetMultiple * atr
-        : finalSignal.direction === "short"
+        : det.direction === "short"
         ? lastClose - targetMultiple * atr
         : undefined;
-    const positionSizePct = Math.max(0, Math.min(1, finalSignal.strength / 100)) * 0.5;
+    const positionSizePct = det.positionSizePct;
 
     return NextResponse.json({
       symbol,
@@ -141,7 +144,19 @@ export async function GET(req: NextRequest) {
       ta,
       mtf: { confirmInterval, taPrimary: ta, taConfirm: taHTF, combinedScore: combinedTaScore },
       news: { headlines, sentiment },
-      signal: { ...finalSignal, stopLoss, takeProfit, positionSizePct },
+      signal: {
+        // prefer deterministic gates for direction/strength, but include LLM rationale
+        direction: det.direction !== "neutral" ? det.direction : finalSignalLLM.direction,
+        strength: det.strength,
+        rationale: [
+          ...det.rationale,
+          ...(finalSignalLLM.rationale || []).slice(0, 3),
+        ],
+        stopLoss,
+        takeProfit,
+        positionSizePct,
+        entryHint: det.entryHint,
+      },
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";

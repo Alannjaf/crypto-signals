@@ -11,6 +11,7 @@ import {
   BinanceIntervalSchema,
 } from "@/lib/binance";
 import { buildDeterministicSignal } from "@/lib/signal";
+import pLimit from "p-limit";
 
 const Q = z.object({
   interval: BinanceIntervalSchema.default("4h"),
@@ -53,41 +54,28 @@ export async function GET(req: NextRequest) {
       score: number;
     }> = [];
 
-    for (const symbol of coins) {
-      try {
-        const candles = await fetchCandles({ symbol, interval, limit: 500 });
-        if (candles.length < 60) continue;
-        const closes = extractCloses(candles);
-        const highs = extractHighs(candles);
-        const lows = extractLows(candles);
-        const volumes = extractVolumes(candles);
-        const snap = computeIndicators({ closes, highs, lows, volumes });
-        const ta = heuristicTaRecommendation(snap);
-        // quick news sentiment using just top headlines (shared set)
-        const newsSent = {
-          overall: "neutral" as const,
-          confidence: 0.4,
-          reasons: ["Skipped per-coin for speed"],
-        };
-        const det = buildDeterministicSignal({
-          snapshot: snap,
-          taPrimary: ta,
-          snapshotHTF: snap,
-          taConfirm: ta,
-          combinedTaScore: ta.score,
-          news: newsSent,
-        });
-        results.push({
-          symbol,
-          interval,
-          strength: det.strength,
-          direction: det.direction,
-          score: ta.score,
-        });
-      } catch {
-        // ignore coin errors
-      }
-    }
+    const limit = pLimit(6); // avoid function timeouts by limiting parallel fetches
+    await Promise.all(
+      coins.map((symbol) =>
+        limit(async () => {
+          try {
+            const candles = await fetchCandles({ symbol, interval, limit: 400 });
+            if (candles.length < 60) return;
+            const closes = extractCloses(candles);
+            const highs = extractHighs(candles);
+            const lows = extractLows(candles);
+            const volumes = extractVolumes(candles);
+            const snap = computeIndicators({ closes, highs, lows, volumes });
+            const ta = heuristicTaRecommendation(snap);
+            const newsSent = { overall: "neutral" as const, confidence: 0.4, reasons: ["Skipped per-coin for speed"] };
+            const det = buildDeterministicSignal({ snapshot: snap, taPrimary: ta, snapshotHTF: snap, taConfirm: ta, combinedTaScore: ta.score, news: newsSent });
+            results.push({ symbol, interval, strength: det.strength, direction: det.direction, score: ta.score });
+          } catch {
+            // skip on error
+          }
+        })
+      )
+    );
 
     // Rank strongest
     results.sort((a, b) => b.strength - a.strength);

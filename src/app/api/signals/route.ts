@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  fetchKlines,
-  extractCloses,
-  extractHighs,
-  extractLows,
-  extractVolumes,
-  BinanceIntervalSchema,
-} from "@/lib/binance";
+import { extractCloses, extractHighs, extractLows, extractVolumes, BinanceIntervalSchema } from "@/lib/binance";
+import { fetchCandles } from "@/lib/candles";
 import { computeIndicators, heuristicTaRecommendation } from "@/lib/indicators";
 import { fetchCryptoNews } from "@/lib/news";
 import { analyzeNewsSentiment, synthesizeSignal } from "@/lib/openai";
@@ -53,7 +47,7 @@ export async function GET(req: NextRequest) {
     const confirmInterval = parsed.data.confirmInterval ?? (defaultConfirm(interval) as typeof interval);
 
     // 1) Price data
-    const klines = await fetchKlines({ symbol, interval, limit: 500 });
+    const klines = await fetchCandles({ symbol, interval, limit: 500 });
     if (klines.length < 60) {
       return NextResponse.json(
         { error: "Insufficient data from exchange" },
@@ -71,7 +65,7 @@ export async function GET(req: NextRequest) {
     const ta = heuristicTaRecommendation(snapshot);
 
     // 2b) Higher timeframe confirmation
-    const klinesHTF = await fetchKlines({ symbol, interval: confirmInterval, limit: 500 });
+    const klinesHTF = await fetchCandles({ symbol, interval: confirmInterval, limit: 500 });
     const closesHTF = extractCloses(klinesHTF);
     const highsHTF = extractHighs(klinesHTF);
     const lowsHTF = extractLows(klinesHTF);

@@ -18,6 +18,7 @@ const QuerySchema = z.object({
     .min(3)
     .transform((s) => s.toUpperCase()),
   interval: BinanceIntervalSchema.default("4h"),
+  confirmInterval: BinanceIntervalSchema.optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -26,6 +27,7 @@ export async function GET(req: NextRequest) {
     const parsed = QuerySchema.safeParse({
       symbol: searchParams.get("symbol") ?? "BTCUSDT",
       interval: searchParams.get("interval") ?? "4h",
+      confirmInterval: searchParams.get("confirmInterval") ?? undefined,
     });
     if (!parsed.success) {
       return NextResponse.json(
@@ -35,6 +37,19 @@ export async function GET(req: NextRequest) {
     }
 
     const { symbol, interval } = parsed.data;
+    const defaultConfirm = (i: string): string => {
+      switch (i) {
+        case "15m":
+          return "1h";
+        case "1h":
+          return "4h";
+        case "4h":
+          return "1d";
+        default:
+          return "1d";
+      }
+    };
+    const confirmInterval = parsed.data.confirmInterval ?? (defaultConfirm(interval) as typeof interval);
 
     // 1) Price data
     const klines = await fetchKlines({ symbol, interval, limit: 500 });
@@ -50,9 +65,21 @@ export async function GET(req: NextRequest) {
     const lows = extractLows(klines);
     const volumes = extractVolumes(klines);
 
-    // 2) Indicators and TA heuristic
+    // 2) Indicators and TA heuristic (primary)
     const snapshot = computeIndicators({ closes, highs, lows, volumes });
     const ta = heuristicTaRecommendation(snapshot);
+
+    // 2b) Higher timeframe confirmation
+    const klinesHTF = await fetchKlines({ symbol, interval: confirmInterval, limit: 500 });
+    const closesHTF = extractCloses(klinesHTF);
+    const highsHTF = extractHighs(klinesHTF);
+    const lowsHTF = extractLows(klinesHTF);
+    const volumesHTF = extractVolumes(klinesHTF);
+    const snapshotHTF = computeIndicators({ closes: closesHTF, highs: highsHTF, lows: lowsHTF, volumes: volumesHTF });
+    const taHTF = heuristicTaRecommendation(snapshotHTF);
+    let combinedTaScore = Math.round(0.7 * ta.score + 0.3 * taHTF.score);
+    const disagree = (ta.score > 0 && taHTF.score < 0) || (ta.score < 0 && taHTF.score > 0);
+    if (disagree) combinedTaScore = Math.round(combinedTaScore * 0.5);
 
     // 3) News sentiment via OpenAI
     const news = await fetchCryptoNews(20);
@@ -82,7 +109,7 @@ export async function GET(req: NextRequest) {
       symbol: symbolKey,
       timeframe: interval,
       taSnapshot: snapshot,
-      taScore: ta.score,
+      taScore: combinedTaScore,
       taReasons: ta.reasons,
       newsSentiment: sentiment,
     });
@@ -109,8 +136,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       symbol,
       interval,
+      confirmInterval,
       indicators: snapshot,
       ta,
+      mtf: { confirmInterval, taPrimary: ta, taConfirm: taHTF, combinedScore: combinedTaScore },
       news: { headlines, sentiment },
       signal: { ...finalSignal, stopLoss, takeProfit, positionSizePct },
     });

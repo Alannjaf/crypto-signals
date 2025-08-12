@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { IndicatorSnapshot } from "@/lib/indicators";
 import type { NewsSentiment } from "@/lib/openai";
+import { useBinanceTicker, formatPriceForDisplay } from "@/lib/useTicker";
 
 type ApiResponse = {
   symbol: string;
@@ -62,6 +63,8 @@ export default function Home() {
       totalPnL: number;
     };
   } | null>(null);
+
+  const ticker = useBinanceTicker(symbol);
 
   useEffect(() => {
     (async () => {
@@ -182,7 +185,7 @@ export default function Home() {
                   </option>
                 ))}
               </select>
-            </div>
+        </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Timeframe
@@ -226,7 +229,15 @@ export default function Home() {
                       {data.symbol} · {data.interval}
                     </p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right space-y-1">
+                    <div className="text-sm text-gray-500">
+                      Live: {formatPriceForDisplay(ticker.price)}
+                      {typeof ticker.changePct === "number" && (
+                        <span className={ticker.changePct >= 0 ? "text-green-600" : "text-red-600"}>
+                          {" "}({ticker.changePct.toFixed(2)}%)
+                        </span>
+                      )}
+                    </div>
                     <div className="text-2xl font-bold capitalize">
                       {data.signal.direction}
                     </div>

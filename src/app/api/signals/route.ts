@@ -6,6 +6,7 @@ import { computeIndicators, heuristicTaRecommendation } from "@/lib/indicators";
 import { fetchCryptoNews } from "@/lib/news";
 import { analyzeNewsSentiment, synthesizeSignal } from "@/lib/openai";
 import { buildDeterministicSignal } from "@/lib/signal";
+import { toErrorResponse } from "@/lib/errors";
 
 const QuerySchema = z.object({
   symbol: z
@@ -155,6 +156,6 @@ export async function GET(req: NextRequest) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("/api/signals error", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(toErrorResponse("INTERNAL", message), { status: 500 });
   }
 }

@@ -65,6 +65,9 @@ export default function Home() {
   } | null>(null);
 
   const ticker = useBinanceTicker(symbol);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanData, setScanData] = useState<null | { interval: string; scanned: number; topLongs: { symbol: string; strength: number }[]; topShorts: { symbol: string; strength: number }[] }>(null);
 
   useEffect(() => {
     (async () => {
@@ -358,6 +361,58 @@ export default function Home() {
                     <div>
                       Wins: {btData.stats.wins} · Losses: {btData.stats.losses}{" "}
                       · Draws: {btData.stats.draws}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Scan Top 100</h3>
+                  <button
+                    onClick={async () => {
+                      try {
+                        setScanLoading(true); setScanError(null); setScanData(null);
+                        const res = await fetch(`/api/scan?interval=${encodeURIComponent(interval)}`);
+                        if (!res.ok) {
+                          const err = await res.json().catch(() => ({}));
+                          throw new Error(err.message || `Scan failed: ${res.status}`);
+                        }
+                        const json = await res.json();
+                        setScanData(json);
+                      } catch (e: unknown) {
+                        const msg = e instanceof Error ? e.message : 'Unknown error';
+                        setScanError(msg);
+                      } finally {
+                        setScanLoading(false);
+                      }
+                    }}
+                    disabled={scanLoading}
+                    className="rounded-md bg-gray-900 px-3 py-1.5 text-white hover:bg-black disabled:opacity-50"
+                  >
+                    {scanLoading ? "Scanning..." : "Scan Top 100"}
+                  </button>
+                </div>
+                {scanError && <div className="mt-2 text-sm text-red-600">{scanError}</div>}
+                {scanData && (
+                  <div className="mt-3 text-sm text-gray-700">
+                    <div className="text-gray-600 mb-2">Scanned: {scanData.scanned} · Interval: {scanData.interval}</div>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div>
+                        <div className="font-semibold mb-1">Top Longs</div>
+                        <ul className="space-y-1">
+                          {scanData.topLongs.map((r) => (
+                            <li key={r.symbol} className="flex justify-between"><span>{r.symbol}</span><span>{r.strength}</span></li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <div className="font-semibold mb-1">Top Shorts</div>
+                        <ul className="space-y-1">
+                          {scanData.topShorts.map((r) => (
+                            <li key={r.symbol} className="flex justify-between"><span>{r.symbol}</span><span>{r.strength}</span></li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
                   </div>
                 )}

@@ -46,8 +46,13 @@ export function buildDeterministicSignal(params: {
   const mtfBear = taConfirm.score < -10;
   const bbp = snapshot.bb20?.percentB;
 
-  const longGates = [emaBull, adxStrong, macdUp, stochUp, mtfBull];
-  const shortGates = [emaBear, adxStrong, macdDown, stochDown, mtfBear];
+  const obvUp = (snapshot.obv ?? 0) > (snapshot.obvSma21 ?? Number.POSITIVE_INFINITY - Number.POSITIVE_INFINITY); // if obvSma21 undefined, ignore
+  const obvDown = (snapshot.obv ?? 0) < (snapshot.obvSma21 ?? Number.NEGATIVE_INFINITY + Number.NEGATIVE_INFINITY);
+  const mfiLow = (snapshot.mfi14 ?? 50) < 25;
+  const mfiHigh = (snapshot.mfi14 ?? 50) > 75;
+
+  const longGates = [emaBull, adxStrong, macdUp, stochUp, mtfBull, obvUp || snapshot.obvSma21 === undefined, mfiLow || snapshot.mfi14 === undefined];
+  const shortGates = [emaBear, adxStrong, macdDown, stochDown, mtfBear, obvDown || snapshot.obvSma21 === undefined, mfiHigh || snapshot.mfi14 === undefined];
   const longHits = longGates.filter(Boolean).length;
   const shortHits = shortGates.filter(Boolean).length;
   const longFraction = longHits / longGates.length;

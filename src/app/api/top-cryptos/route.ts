@@ -30,10 +30,15 @@ export async function GET() {
 
     const res = await fetch(url.toString(), { next: { revalidate: 600 } });
     if (!res.ok) {
-      return NextResponse.json({ error: `coingecko ${res.status}` }, { status: 502 });
+      return NextResponse.json(
+        { error: `coingecko ${res.status}` },
+        { status: 502 }
+      );
     }
     const data = (await res.json()) as CoinGeckoMarket[];
-    const filtered = data.filter((c) => !STABLES.has(c.symbol.toLowerCase())).slice(0, 100);
+    const filtered = data
+      .filter((c) => !STABLES.has(c.symbol.toLowerCase()))
+      .slice(0, 100);
     const mapped = filtered.map((c) => ({
       id: c.id,
       symbol: c.symbol.toUpperCase(),
@@ -47,5 +52,3 @@ export async function GET() {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-

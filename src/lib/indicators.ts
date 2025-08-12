@@ -1,4 +1,4 @@
-import { RSI, EMA, MACD, Stochastic, ADX, ATR, BollingerBands, OBV, SMA } from "technicalindicators";
+import { RSI, EMA, MACD, Stochastic, ADX, ATR, BollingerBands, OBV, SMA, MFI } from "technicalindicators";
 
 export type IndicatorInputs = {
   closes: number[];
@@ -18,6 +18,10 @@ export type IndicatorSnapshot = {
   bb20?: { middle: number; upper: number; lower: number; bandwidth: number; percentB: number };
   obv?: number;
   sma200?: number;
+  mfi14?: number;
+  volume?: number;
+  volSma20?: number;
+  obvSma21?: number;
 };
 
 export function computeIndicators({ closes, highs, lows, volumes }: IndicatorInputs): IndicatorSnapshot {
@@ -44,6 +48,9 @@ export function computeIndicators({ closes, highs, lows, volumes }: IndicatorInp
   const bbSeries = BollingerBands.calculate({ period: 20, values: closes, stdDev: 2 });
   const sma200Series = SMA.calculate({ period: 200, values: closes });
   const obvSeries = volumes ? OBV.calculate({ close: closes, volume: volumes }) : [];
+  const mfiSeries = volumes ? MFI.calculate({ high: highs, low: lows, close: closes, volume: volumes, period: 14 }) : [];
+  const volSma20Series = volumes ? SMA.calculate({ period: 20, values: volumes }) : [];
+  const obvSma21Series = obvSeries.length ? SMA.calculate({ period: 21, values: obvSeries }) : [];
 
   const rsi14 = rsiSeries.at(-1);
   const ema20 = ema20Series.at(-1);
@@ -55,6 +62,9 @@ export function computeIndicators({ closes, highs, lows, volumes }: IndicatorInp
   const bb = bbSeries.at(-1);
   const sma200 = sma200Series.at(-1);
   const obv = obvSeries.at(-1);
+  const mfi14 = mfiSeries.at(-1);
+  const volSma20 = volSma20Series.at(-1);
+  const obvSma21 = obvSma21Series.at(-1);
 
   return {
     rsi14,
@@ -83,6 +93,10 @@ export function computeIndicators({ closes, highs, lows, volumes }: IndicatorInp
       : undefined,
     obv,
     sma200,
+    mfi14,
+    volume: volumes?.at(-1),
+    volSma20,
+    obvSma21,
   };
 }
 
@@ -170,6 +184,29 @@ export function heuristicTaRecommendation(
   if (snapshot.sma200 !== undefined && snapshot.ema50 !== undefined) {
     if (snapshot.ema50 > snapshot.sma200) score += 3;
     if (snapshot.ema50 < snapshot.sma200) score -= 3;
+  }
+
+  // MFI extremes
+  if (snapshot.mfi14 !== undefined) {
+    if (snapshot.mfi14 > 80) { score -= 8; reasons.push("MFI overbought (>80)"); }
+    else if (snapshot.mfi14 < 20) { score += 8; reasons.push("MFI oversold (<20)"); }
+  }
+
+  // Volume confirmation (relative to 20SMA)
+  if (snapshot.volume !== undefined && snapshot.volSma20) {
+    const volRatio = snapshot.volSma20 ? snapshot.volume / (snapshot.volSma20 || 1) : 1;
+    if (volRatio >= 1.3) {
+      // boost in the direction suggested by EMAs / MACD
+      const sign = (snapshot.ema20 && snapshot.ema50 && snapshot.ema20 > snapshot.ema50 ? 1 : -1) + (snapshot.macd?.histogram ?? 0 > 0 ? 1 : -1);
+      score += Math.sign(sign) * 5;
+      reasons.push("High volume vs avg");
+    }
+  }
+
+  // OBV trend filter
+  if (snapshot.obv !== undefined && snapshot.obvSma21 !== undefined) {
+    if (snapshot.obv > snapshot.obvSma21) { score += 4; reasons.push("OBV rising"); }
+    else if (snapshot.obv < snapshot.obvSma21) { score -= 4; reasons.push("OBV falling"); }
   }
 
   // Clamp score

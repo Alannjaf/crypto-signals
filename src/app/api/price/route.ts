@@ -7,8 +7,14 @@ const Q = z.object({ symbol: z.string().min(3) });
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const parsed = Q.safeParse({ symbol: searchParams.get("symbol") ?? "BTCUSDT" });
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    const parsed = Q.safeParse({
+      symbol: searchParams.get("symbol") ?? "BTCUSDT",
+    });
+    if (!parsed.success)
+      return NextResponse.json(
+        { error: parsed.error.flatten() },
+        { status: 400 }
+      );
     const symbol = parsed.data.symbol.toUpperCase();
     // 1) Binance
     try {
@@ -25,7 +31,10 @@ export async function GET(req: NextRequest) {
     try {
       const { base, quote } = parseSymbol(symbol);
       const product = `${base}-${quote === "USDT" ? "USD" : quote}`;
-      const res = await fetch(`https://api.exchange.coinbase.com/products/${product}/ticker`, { headers: { Accept: "application/json" }, next: { revalidate: 5 } });
+      const res = await fetch(
+        `https://api.exchange.coinbase.com/products/${product}/ticker`,
+        { headers: { Accept: "application/json" }, next: { revalidate: 5 } }
+      );
       if (res.ok) {
         const json = await res.json();
         return NextResponse.json({ symbol, price: Number(json.price) });
@@ -41,11 +50,15 @@ export async function GET(req: NextRequest) {
       const headers: Record<string, string> = { Accept: "application/json" };
       const key = process.env.CRYPTOCOMPARE_API_KEY;
       if (key) headers["Authorization"] = `Apikey ${key}`;
-      const res = await fetch(url.toString(), { headers, next: { revalidate: 5 } });
+      const res = await fetch(url.toString(), {
+        headers,
+        next: { revalidate: 5 },
+      });
       if (res.ok) {
         const json = await res.json();
         const val = json[quote === "USDT" ? "USD" : quote];
-        if (typeof val === "number") return NextResponse.json({ symbol, price: val });
+        if (typeof val === "number")
+          return NextResponse.json({ symbol, price: val });
       }
     } catch {}
 
@@ -55,5 +68,3 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-

@@ -67,7 +67,12 @@ export default function Home() {
   const ticker = useBinanceTicker(symbol);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
-  const [scanData, setScanData] = useState<null | { interval: string; scanned: number; topLongs: { symbol: string; strength: number }[]; topShorts: { symbol: string; strength: number }[] }>(null);
+  const [scanData, setScanData] = useState<null | {
+    interval: string;
+    scanned: number;
+    topLongs: { symbol: string; strength: number }[];
+    topShorts: { symbol: string; strength: number }[];
+  }>(null);
 
   useEffect(() => {
     (async () => {
@@ -188,7 +193,7 @@ export default function Home() {
                   </option>
                 ))}
               </select>
-        </div>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Timeframe
@@ -222,6 +227,77 @@ export default function Home() {
             </div>
           )}
 
+          {/* Scan Top 100 – always visible */}
+          <div className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Scan Top 100</h3>
+              <button
+                onClick={async () => {
+                  try {
+                    setScanLoading(true);
+                    setScanError(null);
+                    setScanData(null);
+                    const res = await fetch(
+                      `/api/scan?interval=${encodeURIComponent(interval)}`
+                    );
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({}));
+                      throw new Error(
+                        err.message || `Scan failed: ${res.status}`
+                      );
+                    }
+                    const json = await res.json();
+                    setScanData(json);
+                  } catch (e: unknown) {
+                    const msg =
+                      e instanceof Error ? e.message : "Unknown error";
+                    setScanError(msg);
+                  } finally {
+                    setScanLoading(false);
+                  }
+                }}
+                disabled={scanLoading}
+                className="rounded-md bg-gray-900 px-3 py-1.5 text-white hover:bg-black disabled:opacity-50"
+              >
+                {scanLoading ? "Scanning..." : "Scan Top 100"}
+              </button>
+            </div>
+            {scanError && (
+              <div className="mt-2 text-sm text-red-600">{scanError}</div>
+            )}
+            {scanData && (
+              <div className="mt-3 text-sm text-gray-700">
+                <div className="text-gray-600 mb-2">
+                  Scanned: {scanData.scanned} · Interval: {scanData.interval}
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <div className="font-semibold mb-1">Top Longs</div>
+                    <ul className="space-y-1">
+                      {scanData.topLongs.map((r) => (
+                        <li key={r.symbol} className="flex justify-between">
+                          <span>{r.symbol}</span>
+                          <span>{r.strength}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="font-semibold mb-1">Top Shorts</div>
+                    <ul className="space-y-1">
+                      {scanData.topShorts.map((r) => (
+                        <li key={r.symbol} className="flex justify-between">
+                          <span>{r.symbol}</span>
+                          <span>{r.strength}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {data && (
             <div className="mt-8 space-y-6">
               <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
@@ -236,8 +312,15 @@ export default function Home() {
                     <div className="text-sm text-gray-500">
                       Live: {formatPriceForDisplay(ticker.price)}
                       {typeof ticker.changePct === "number" && (
-                        <span className={ticker.changePct >= 0 ? "text-green-600" : "text-red-600"}>
-                          {" "}({ticker.changePct.toFixed(2)}%)
+                        <span
+                          className={
+                            ticker.changePct >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }
+                        >
+                          {" "}
+                          ({ticker.changePct.toFixed(2)}%)
                         </span>
                       )}
                     </div>
@@ -247,8 +330,15 @@ export default function Home() {
                     <div className="text-sm text-gray-600">
                       Strength: {data.signal.strength}/100
                     </div>
-                    {"entryHint" in (data.signal as unknown as Record<string, unknown>) && (
-                      <div className="text-xs text-gray-500">Entry: {(data.signal as unknown as { entryHint?: string }).entryHint}</div>
+                    {"entryHint" in
+                      (data.signal as unknown as Record<string, unknown>) && (
+                      <div className="text-xs text-gray-500">
+                        Entry:{" "}
+                        {
+                          (data.signal as unknown as { entryHint?: string })
+                            .entryHint
+                        }
+                      </div>
                     )}
                   </div>
                 </div>
@@ -361,58 +451,6 @@ export default function Home() {
                     <div>
                       Wins: {btData.stats.wins} · Losses: {btData.stats.losses}{" "}
                       · Draws: {btData.stats.draws}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Scan Top 100</h3>
-                  <button
-                    onClick={async () => {
-                      try {
-                        setScanLoading(true); setScanError(null); setScanData(null);
-                        const res = await fetch(`/api/scan?interval=${encodeURIComponent(interval)}`);
-                        if (!res.ok) {
-                          const err = await res.json().catch(() => ({}));
-                          throw new Error(err.message || `Scan failed: ${res.status}`);
-                        }
-                        const json = await res.json();
-                        setScanData(json);
-                      } catch (e: unknown) {
-                        const msg = e instanceof Error ? e.message : 'Unknown error';
-                        setScanError(msg);
-                      } finally {
-                        setScanLoading(false);
-                      }
-                    }}
-                    disabled={scanLoading}
-                    className="rounded-md bg-gray-900 px-3 py-1.5 text-white hover:bg-black disabled:opacity-50"
-                  >
-                    {scanLoading ? "Scanning..." : "Scan Top 100"}
-                  </button>
-                </div>
-                {scanError && <div className="mt-2 text-sm text-red-600">{scanError}</div>}
-                {scanData && (
-                  <div className="mt-3 text-sm text-gray-700">
-                    <div className="text-gray-600 mb-2">Scanned: {scanData.scanned} · Interval: {scanData.interval}</div>
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      <div>
-                        <div className="font-semibold mb-1">Top Longs</div>
-                        <ul className="space-y-1">
-                          {scanData.topLongs.map((r) => (
-                            <li key={r.symbol} className="flex justify-between"><span>{r.symbol}</span><span>{r.strength}</span></li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div>
-                        <div className="font-semibold mb-1">Top Shorts</div>
-                        <ul className="space-y-1">
-                          {scanData.topShorts.map((r) => (
-                            <li key={r.symbol} className="flex justify-between"><span>{r.symbol}</span><span>{r.strength}</span></li>
-                          ))}
-                        </ul>
-                      </div>
                     </div>
                   </div>
                 )}
